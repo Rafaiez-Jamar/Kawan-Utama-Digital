@@ -152,6 +152,9 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
 
       setLastSaved(new Date().toLocaleTimeString('id-ID'))
       setTimeout(() => setLastSaved(null), 2000)
+
+      // Refresh MOM list so draft appears in the table
+      await loadMOMList()
     } catch (err) {
       console.error('Error saving draft:', err)
     } finally {
@@ -202,6 +205,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       })
 
       setShowForm(false)
+      setDraftLoaded(false) // Reset so next draft can be auto-loaded
       alert('MOM berhasil dipublikasikan!')
       loadMOMList()
     } catch (err) {

@@ -47,32 +47,32 @@ CREATE POLICY "Sales can create MOM" ON public.mom
 -- Users can view their own MOM (draft or published) OR published MOM by others
 CREATE POLICY "Users can view own draft or published MOM" ON public.mom
   FOR SELECT USING (
-    created_by_email = current_user_email OR status = 'PUBLISHED'
+    created_by_email = auth.jwt()->>'email' OR status = 'PUBLISHED'
   );
 
 -- Sales can update their own DRAFT MOM only
 CREATE POLICY "Sales can update own draft MOM" ON public.mom
   FOR UPDATE USING (
-    created_by_email = current_user_email AND status = 'DRAFT'
+    created_by_email = auth.jwt()->>'email' AND status = 'DRAFT'
   )
   WITH CHECK (status = 'DRAFT');
 
 -- Super Admin can update published MOM
 CREATE POLICY "Super Admin can update published MOM" ON public.mom
   FOR UPDATE USING (
-    (current_setting('request.jwt.claims'::text)::json->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED') OR 
-    created_by_email = current_user_email
+    (auth.jwt()->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED') OR 
+    created_by_email = auth.jwt()->>'email'
   )
   WITH CHECK (
-    (current_setting('request.jwt.claims'::text)::json->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED') OR 
-    created_by_email = current_user_email
+    (auth.jwt()->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED') OR 
+    created_by_email = auth.jwt()->>'email'
   );
 
 -- Super Admin can delete published MOM, users can delete their own
 CREATE POLICY "Users can delete own or Super Admin delete published" ON public.mom
   FOR DELETE USING (
-    created_by_email = current_user_email OR 
-    (current_setting('request.jwt.claims'::text)::json->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED')
+    created_by_email = auth.jwt()->>'email' OR 
+    (auth.jwt()->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED')
   );
 ```
 
