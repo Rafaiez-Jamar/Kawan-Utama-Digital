@@ -315,24 +315,25 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
 
       {showForm && userRole === 'sales' && (
         <div className="settings-grid" style={{ marginBottom: '2rem' }}>
-          <form className="create-user-panel" onSubmit={(e) => { e.preventDefault(); publishMOM() }}>
-            <div className="panel-heading">
-              <div className="panel-icon">
-                <FileText size={18} />
+          <form className="create-user-panel" onSubmit={(e) => { e.preventDefault(); publishMOM() }} style={{ maxWidth: '900px' }}>
+            {/* Header */}
+            <div className="panel-heading" style={{ background: formData.status === 'DRAFT' ? 'linear-gradient(135deg, #fff8e6 0%, #ffe6cc 100%)' : 'linear-gradient(135deg, #e6f9f0 0%, #ccf0e0 100%)', borderBottom: `3px solid ${formData.status === 'DRAFT' ? '#ff9500' : '#00b894'}` }}>
+              <div className="panel-icon" style={{ backgroundColor: formData.status === 'DRAFT' ? '#ff9500' : '#00b894', color: 'white' }}>
+                <FileText size={20} />
               </div>
               <div>
-                <h2>
+                <h2 style={{ marginBottom: '4px', color: '#1a1a1a' }}>
                   {formData.id ? 'Edit MOM Draft' : 'Buat MOM Baru'}
                 </h2>
-                <p>
+                <p style={{ margin: 0 }}>
                   {formData.status === 'DRAFT' ? (
-                    <span style={{ color: '#ff9500' }}>
-                      <Clock size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                    <span style={{ color: '#ff9500', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Clock size={14} />
                       Draft - Hanya Anda yang bisa melihat
                     </span>
                   ) : (
-                    <span style={{ color: '#00b894' }}>
-                      <CheckCircle2 size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                    <span style={{ color: '#00b894', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle2 size={14} />
                       Published - Terlihat oleh tim lain
                     </span>
                   )}
@@ -340,108 +341,255 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
               </div>
             </div>
 
-            <label>
-              Nama Client
-              <input
-                value={formData.client_name}
-                onChange={(e) => handleFormChange('client_name', e.target.value)}
-                placeholder="e.g. PT Contoh Jaya"
-                required
-              />
-            </label>
+            {/* Meeting Info Section */}
+            <div style={{ padding: '2rem', borderBottom: '2px solid #f0f0f0' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: '#666', letterSpacing: '0.5px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#ff9500' }}></div>
+                Informasi Pertemuan
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Nama Client *</span>
+                  <input
+                    value={formData.client_name}
+                    onChange={(e) => handleFormChange('client_name', e.target.value)}
+                    placeholder="e.g. PT Contoh Jaya"
+                    required
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', transition: 'all 0.2s' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#ff9500'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Tanggal Pertemuan *</span>
+                  <input
+                    type="date"
+                    value={formData.meeting_date}
+                    onChange={(e) => handleFormChange('meeting_date', e.target.value)}
+                    required
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#ff9500'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Waktu Pertemuan</span>
+                  <input
+                    type="time"
+                    value={formData.meeting_time}
+                    onChange={(e) => handleFormChange('meeting_time', e.target.value)}
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#ff9500'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
+              </div>
+            </div>
 
-            <label>
-              Tanggal Pertemuan
-              <input
-                type="date"
-                value={formData.meeting_date}
-                onChange={(e) => handleFormChange('meeting_date', e.target.value)}
-                required
-              />
-            </label>
+            {/* Content Section */}
+            <div style={{ padding: '2rem', borderBottom: '2px solid #f0f0f0' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: '#666', letterSpacing: '0.5px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#0066cc' }}></div>
+                Konten MOM
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Ringkasan Hasil Pertemuan</span>
+                  <textarea
+                    value={formData.summary}
+                    onChange={(e) => handleFormChange('summary', e.target.value)}
+                    placeholder="Ringkas hasil diskusi dengan klien..."
+                    rows={4}
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
 
-            <label>
-              Waktu Pertemuan
-              <input
-                type="time"
-                value={formData.meeting_time}
-                onChange={(e) => handleFormChange('meeting_time', e.target.value)}
-              />
-            </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Catatan Tambahan</span>
+                  <textarea
+                    value={formData.notes}
+                    onChange={(e) => handleFormChange('notes', e.target.value)}
+                    placeholder="Catatan atau follow-up penting..."
+                    rows={3}
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
 
-            <label>
-              Ringkasan Hasil Pertemuan
-              <textarea
-                value={formData.summary}
-                onChange={(e) => handleFormChange('summary', e.target.value)}
-                placeholder="Ringkas hasil diskusi dengan klien..."
-                rows={4}
-              />
-            </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Action Items / Kesimpulan</span>
+                  <textarea
+                    value={formData.action_items}
+                    onChange={(e) => handleFormChange('action_items', e.target.value)}
+                    placeholder="Tindak lanjut yang perlu dilakukan..."
+                    rows={3}
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
+              </div>
+            </div>
 
-            <label>
-              Catatan Tambahan
-              <textarea
-                value={formData.notes}
-                onChange={(e) => handleFormChange('notes', e.target.value)}
-                placeholder="Catatan atau follow-up penting..."
-                rows={3}
-              />
-            </label>
+            {/* Follow-up Section */}
+            <div style={{ padding: '2rem', borderBottom: '2px solid #f0f0f0' }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: '#666', letterSpacing: '0.5px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#7c3aed' }}></div>
+                Tindak Lanjut
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>PIC (Penanggung Jawab)</span>
+                  <input
+                    value={formData.pic_name}
+                    onChange={(e) => handleFormChange('pic_name', e.target.value)}
+                    placeholder="Nama orang yang bertanggung jawab"
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#7c3aed'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
 
-            <label>
-              Action Items / Kesimpulan
-              <textarea
-                value={formData.action_items}
-                onChange={(e) => handleFormChange('action_items', e.target.value)}
-                placeholder="Tindak lanjut yang perlu dilakukan..."
-                rows={3}
-              />
-            </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Deadline</span>
+                  <input
+                    type="date"
+                    value={formData.deadline}
+                    onChange={(e) => handleFormChange('deadline', e.target.value)}
+                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
+                    onFocus={(e) => e.currentTarget.style.borderColor = '#7c3aed'}
+                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
+                  />
+                </label>
+              </div>
+            </div>
 
-            <label>
-              PIC (Penanggung Jawab)
-              <input
-                value={formData.pic_name}
-                onChange={(e) => handleFormChange('pic_name', e.target.value)}
-                placeholder="Nama orang yang bertanggung jawab"
-              />
-            </label>
-
-            <label>
-              Deadline
-              <input
-                type="date"
-                value={formData.deadline}
-                onChange={(e) => handleFormChange('deadline', e.target.value)}
-              />
-            </label>
-
-            <div className="form-actions">
+            {/* Actions */}
+            <div className="form-actions" style={{ display: 'flex', gap: '10px', padding: '2rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
               {formData.status === 'DRAFT' ? (
                 <>
-                  <button className="submit-button" type="button" onClick={() => saveDraft()} disabled={isSavingDraft || !formData.client_name}>
+                  <button 
+                    className="submit-button" 
+                    type="button" 
+                    onClick={() => saveDraft()} 
+                    disabled={isSavingDraft || !formData.client_name}
+                    style={{ 
+                      backgroundColor: isSavingDraft ? '#ccc' : '#ff9500',
+                      color: 'white',
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: '600',
+                      cursor: isSavingDraft ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '14px'
+                    }}
+                    onMouseEnter={(e) => !isSavingDraft && (e.currentTarget.style.backgroundColor = '#e68900')}
+                    onMouseLeave={(e) => !isSavingDraft && (e.currentTarget.style.backgroundColor = '#ff9500')}
+                  >
                     💾 Simpan Draft
                   </button>
-                  <button className="submit-button" type="submit" style={{ backgroundColor: '#00b894' }}>
-                    <Send size={18} /> Publikasikan MOM
+                  <button 
+                    className="submit-button" 
+                    type="submit" 
+                    style={{ 
+                      backgroundColor: '#00b894',
+                      color: 'white',
+                      padding: '10px 20px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '14px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#009373'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00b894'}
+                  >
+                    <Send size={16} /> Publikasikan MOM
                   </button>
                 </>
               ) : (userRole as string) === 'super-admin' ? (
                   <>
-                    <button className="submit-button" type="button" onClick={() => updatePublishedMOM()} style={{ backgroundColor: '#0066cc' }}>
+                    <button 
+                      className="submit-button" 
+                      type="button" 
+                      onClick={() => updatePublishedMOM()} 
+                      style={{ 
+                        backgroundColor: '#0066cc',
+                        color: 'white',
+                        padding: '10px 20px',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '14px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0052a3'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0066cc'}
+                    >
                       ✏️ Update MOM
                     </button>
-                    <button className="cancel-button" type="button" onClick={() => deleteMOM(formData.id)}>
+                    <button 
+                      className="cancel-button" 
+                      type="button" 
+                      onClick={() => deleteMOM(formData.id)}
+                      style={{ 
+                        backgroundColor: '#ff4757',
+                        color: 'white',
+                        padding: '10px 20px',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '14px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ff3838'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff4757'}
+                    >
                       🗑️ Hapus MOM
                     </button>
                   </>
                 ) : null}
-              <button className="cancel-button" type="button" onClick={() => setShowForm(false)}>
+              <button 
+                className="cancel-button" 
+                type="button" 
+                onClick={() => setShowForm(false)}
+                style={{ 
+                  backgroundColor: '#e0e0e0',
+                  color: '#333',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  fontSize: '14px'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d0d0d0'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#e0e0e0'}
+              >
                 Tutup
               </button>
               {lastSaved && (
-                <small style={{ color: '#00b894' }}>
+                <small style={{ color: '#00b894', fontWeight: '600', marginLeft: 'auto', fontSize: '13px' }}>
                   ✓ Draft tersimpan {lastSaved}
                 </small>
               )}
