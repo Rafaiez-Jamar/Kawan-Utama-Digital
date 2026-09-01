@@ -30,6 +30,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
   const [momList, setMomList] = useState<MOMRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [draftLoaded, setDraftLoaded] = useState(false)
   const [formData, setFormData] = useState<MOMRecord>({
     created_by_email: userEmail,
     created_by_name: userName,
@@ -75,6 +76,18 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       }
     }
   }, [userEmail])
+
+  // Auto-load DRAFT from Supabase when momList is fetched
+  useEffect(() => {
+    if (userRole === 'sales' && momList.length > 0 && !draftLoaded && !formData.client_name) {
+      const draft = momList.find(m => m.status === 'DRAFT')
+      if (draft) {
+        setFormData(draft)
+        setShowForm(true)
+        setDraftLoaded(true)
+      }
+    }
+  }, [momList, userRole, draftLoaded, formData.client_name])
 
   async function loadMOMList() {
     if (!supabase) {
@@ -258,6 +271,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     })
     localStorage.removeItem(`mom-draft-${userEmail}`)
     setShowForm(true)
+    setDraftLoaded(true) // Prevent auto-load while user is creating new MOM
   }
 
   if (loading) {
