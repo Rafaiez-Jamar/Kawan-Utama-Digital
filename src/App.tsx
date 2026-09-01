@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { ArrowRight, BarChart3, Boxes, Camera, CheckCircle2, ChevronDown, CircleHelp, LayoutDashboard, LockKeyhole, LogOut, Menu, Pencil, Settings, ShieldCheck, Trash2, UserRound, UsersRound, X } from 'lucide-react'
 import logo from './assets/kawan-utama-digital.png'
 import { CameraAttendance } from './CameraAttendance'
+import { supabase } from './lib/supabase'
 import './App.css'
 
 type Role = 'sales' | 'product' | 'admin' | 'super-admin'
@@ -33,23 +34,164 @@ function App() {
   const [showPassword, setShowPassword] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeView, setActiveView] = useState('Overview')
-  const [users, setUsers] = useState<User[]>(() => JSON.parse(localStorage.getItem('kawan-users') ?? '[]'))
+  const [users, setUsers] = useState<User[]>([])
   const [editingEmail, setEditingEmail] = useState<string | null>(null)
   const [newUserName, setNewUserName] = useState('')
   const [newUserEmail, setNewUserEmail] = useState('')
   const [newUserPassword, setNewUserPassword] = useState('')
   const [newUserRole, setNewUserRole] = useState<UserRole>('sales')
   const [attendancePhoto, setAttendancePhoto] = useState('')
+  const [attendanceLocation, setAttendanceLocation] = useState<{ latitude: number; longitude: number; label: string } | null>(null)
   const [attendanceDone, setAttendanceDone] = useState(() => localStorage.getItem('kawan-attendance') ?? '')
   const activeRole = roles.find((item) => item.value === role) ?? roles[0]
 
-  function saveUsers(nextUsers: User[]) { setUsers(nextUsers); localStorage.setItem('kawan-users', JSON.stringify(nextUsers)) }
-  function handleLogin(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const account = [superAdmin, ...users].find((user) => user.email.toLowerCase() === email.toLowerCase() && user.password === password); if (account) { setCurrentUserName(account.name); setRole(account.role); setActiveView(navByRole[account.role][0].label); setIsLoggedIn(true) } }
-  function resetUserForm() { setEditingEmail(null); setNewUserName(''); setNewUserEmail(''); setNewUserPassword(''); setNewUserRole('sales') }
-  function handleUserSubmit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (editingEmail) { saveUsers(users.map((user) => user.email === editingEmail ? { name: newUserName, email: newUserEmail, password: newUserPassword, role: newUserRole } : user)) } else { saveUsers([...users, { name: newUserName, email: newUserEmail, password: newUserPassword, role: newUserRole }]) } resetUserForm() }
-  function editUser(user: User) { setEditingEmail(user.email); setNewUserName(user.name); setNewUserEmail(user.email); setNewUserPassword(user.password); setNewUserRole(user.role as UserRole) }
-  function deleteUser(userEmail: string) { if (window.confirm('Hapus user ini dari workspace?')) saveUsers(users.filter((user) => user.email !== userEmail)) }
-  function handleAttendance(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!attendancePhoto) return; const timestamp = new Date().toISOString(); setAttendanceDone(timestamp); localStorage.setItem('kawan-attendance', timestamp) }
+  // Load users from Supabase on component mount
+  useEffect(() => {
+    const loadUsers = async () => {
+      if (!supabase) return
+      try {
+        const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: true })
+        if (error) {
+          console.error('Error loading users:', error)
+        } else {
+          setUsers(data || [])
+        }
+      } catch (err) {
+        console.error('Failed to load users:', err)
+      }
+    }
+    loadUsers()
+  }, [])
+
+  function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const account = [superAdmin, ...users].find((user) => user.email.toLowerCase() === email.toLowerCase() && user.password === password)
+    if (account) {
+      setCurrentUserName(account.name)
+      setRole(account.role)
+      setActiveView(navByRole[account.role][0].label)
+      setIsLoggedIn(true)
+    }
+  }
+
+  function resetUserForm() {
+    setEditingEmail(null)
+    setNewUserName('')
+    setNewUserEmail('')
+    setNewUserPassword('')
+    setNewUserRole('sales')
+  }
+
+  async function handleUserSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!supabase) {
+      alert('Supabase belum siap')
+      return
+    }
+
+    try {
+      if (editingEmail) {
+        // Update existing user
+        const { error } = await supabase
+          .from('users')
+          .update({ name: newUserName, email: newUserEmail, password: newUserPassword, role: newUserRole, updated_at: new Date().toISOString() })
+          .eq('email', editingEmail)
+
+        if (error) {
+          alert('Gagal update user: ' + error.message)
+          return
+        }
+
+        // Reload users
+        const { data } = await supabase.from('users').select('*').order('created_at', { ascending: true })
+        setUsers(data || [])
+      } else {
+        // Create new user
+        const { error } = await supabase.from('users').insert([
+          { name: newUserName, email: newUserEmail, password: newUserPassword, role: newUserRole },
+        ])
+
+        if (error) {
+          alert('Gagal membuat user: ' + error.message)
+          return
+        }
+
+        // Reload users
+        const { data } = await supabase.from('users').select('*').order('created_at', { ascending: true })
+        setUsers(data || [])
+      }
+
+      resetUserForm()
+    } catch (err) {
+      console.error('Error in handleUserSubmit:', err)
+      alert('Terjadi kesalahan saat menyimpan user')
+    }
+  }
+
+  function editUser(user: User) {
+    setEditingEmail(user.email)
+    setNewUserName(user.name)
+    setNewUserEmail(user.email)
+    setNewUserPassword(user.password)
+    setNewUserRole(user.role as UserRole)
+  }
+
+  async function deleteUser(userEmail: string) {
+    if (!window.confirm('Hapus user ini dari workspace?')) return
+    if (!supabase) return
+
+    try {
+      const { error } = await supabase.from('users').delete().eq('email', userEmail)
+
+      if (error) {
+        alert('Gagal hapus user: ' + error.message)
+        return
+      }
+
+      // Reload users
+      const { data } = await supabase.from('users').select('*').order('created_at', { ascending: true })
+      setUsers(data || [])
+    } catch (err) {
+      console.error('Error deleting user:', err)
+      alert('Terjadi kesalahan saat menghapus user')
+    }
+  }
+  async function handleAttendance(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!attendancePhoto) return
+
+    if (!supabase) {
+      alert('Supabase belum siap. Cek konfigurasi environment.')
+      return
+    }
+
+    // Required fields based on attendance table schema
+    const payload = {
+      user_name: currentUserName,
+      user_email: email || `${currentUserName.toLowerCase().replace(/\s+/g, '.')}@kawanutama.com`, // Fallback email if not available
+      location_label: attendanceLocation?.label ?? 'Lokasi tidak tersedia',
+      latitude: attendanceLocation?.latitude ?? null,
+      longitude: attendanceLocation?.longitude ?? null,
+      created_at: new Date().toISOString(),
+    }
+
+    console.log('📤 Submitting attendance payload:', payload)
+    const { data, error } = await supabase.from('attendance').insert([payload])
+    
+    console.log('📥 Insert response - Data:', data, 'Error:', error)
+
+    if (error) {
+      console.error('❌ Supabase insert error:', error)
+      alert('Gagal menyimpan absensi: ' + error.message)
+      return
+    }
+    
+    console.log('✅ Attendance saved successfully!')
+
+    const timestamp = new Date().toISOString()
+    setAttendanceDone(timestamp)
+    localStorage.setItem('kawan-attendance', timestamp)
+  }
 
   if (!isLoggedIn) return <LoginScreen email={email} password={password} showPassword={showPassword} setEmail={setEmail} setPassword={setPassword} setShowPassword={setShowPassword} handleLogin={handleLogin} role={role} setRole={setRole} />
 
@@ -61,7 +203,7 @@ function App() {
       <div className="sidebar-bottom"><button className="nav-item"><CircleHelp size={18} /> Help center</button><div className="profile-card"><span className="profile-avatar">SA</span><span><strong>Sarah Anderson</strong><small>{activeRole.label}</small></span><ChevronDown size={16} /></div></div>
     </aside>
     <main className="dashboard" id="top"><header className="topbar"><button className="icon-button mobile-menu" onClick={() => setMenuOpen(true)} aria-label="Open navigation"><Menu size={21} /></button><div className="breadcrumb"><span>Workspace</span><span>/</span><strong>{activeView}</strong></div><div className="topbar-actions"><span className="role-pill"><ShieldCheck size={15} /> {activeRole.label}</span><button className="sign-out" onClick={() => setIsLoggedIn(false)}><LogOut size={16} /> Sign out</button></div></header>
-      {activeView === 'System settings' && role === 'super-admin' ? <SettingsView users={users} editingEmail={editingEmail} newUserName={newUserName} newUserEmail={newUserEmail} newUserPassword={newUserPassword} newUserRole={newUserRole} setNewUserName={setNewUserName} setNewUserEmail={setNewUserEmail} setNewUserPassword={setNewUserPassword} setNewUserRole={setNewUserRole} handleUserSubmit={handleUserSubmit} editUser={editUser} deleteUser={deleteUser} resetUserForm={resetUserForm} /> : activeView === 'Absensi' && (role === 'sales' || role === 'super-admin') ? <CameraAttendance userName={currentUserName} photo={attendancePhoto} setPhoto={setAttendancePhoto} attendanceDone={attendanceDone} handleAttendance={handleAttendance} /> : <section className="dashboard-content"><div className="welcome-row"><div><p className="eyebrow">Friday, 28 August 2026</p><h1>Good morning, {currentUserName.split(' ')[0]}.</h1><p className="muted">Your workspace is ready when you are.</p></div><div className="access-note"><ShieldCheck size={17} /><span><strong>{activeRole.label} access</strong><small>Menu shown for your role</small></span></div></div><div className="empty-state"><div className="empty-icon"><LayoutDashboard size={24} /></div><h2>{activeView} is empty</h2><p>When your workspace has activity, you’ll see it here.</p></div></section>}
+      {activeView === 'System settings' && role === 'super-admin' ? <SettingsView users={users} editingEmail={editingEmail} newUserName={newUserName} newUserEmail={newUserEmail} newUserPassword={newUserPassword} newUserRole={newUserRole} setNewUserName={setNewUserName} setNewUserEmail={setNewUserEmail} setNewUserPassword={setNewUserPassword} setNewUserRole={setNewUserRole} handleUserSubmit={handleUserSubmit} editUser={editUser} deleteUser={deleteUser} resetUserForm={resetUserForm} /> : activeView === 'Absensi' && (role === 'sales' || role === 'super-admin') ? <CameraAttendance userName={currentUserName} photo={attendancePhoto} setPhoto={setAttendancePhoto} attendanceDone={attendanceDone} handleAttendance={handleAttendance} onLocationChange={setAttendanceLocation} /> : <section className="dashboard-content"><div className="welcome-row"><div><p className="eyebrow">Friday, 28 August 2026</p><h1>Good morning, {currentUserName.split(' ')[0]}.</h1><p className="muted">Your workspace is ready when you are.</p></div><div className="access-note"><ShieldCheck size={17} /><span><strong>{activeRole.label} access</strong><small>Menu shown for your role</small></span></div></div><div className="empty-state"><div className="empty-icon"><LayoutDashboard size={24} /></div><h2>{activeView} is empty</h2><p>When your workspace has activity, you’ll see it here.</p></div></section>}
     </main>
   </div>
 }
