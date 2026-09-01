@@ -54,17 +54,26 @@ CREATE POLICY "Users can view own draft or published MOM" ON public.mom
 CREATE POLICY "Sales can update own draft MOM" ON public.mom
   FOR UPDATE USING (
     created_by_email = current_user_email AND status = 'DRAFT'
-  );
+  )
+  WITH CHECK (status = 'DRAFT');
 
--- Super Admin can update published MOM (but not DRAFT of others)
+-- Super Admin can update published MOM
 CREATE POLICY "Super Admin can update published MOM" ON public.mom
   FOR UPDATE USING (
-    status = 'PUBLISHED' OR created_by_email = current_user_email
+    (current_setting('request.jwt.claims'::text)::json->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED') OR 
+    created_by_email = current_user_email
+  )
+  WITH CHECK (
+    (current_setting('request.jwt.claims'::text)::json->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED') OR 
+    created_by_email = current_user_email
   );
 
--- Anyone can delete their own MOM
-CREATE POLICY "Users can delete own MOM" ON public.mom
-  FOR DELETE USING (created_by_email = current_user_email);
+-- Super Admin can delete published MOM, users can delete their own
+CREATE POLICY "Users can delete own or Super Admin delete published" ON public.mom
+  FOR DELETE USING (
+    created_by_email = current_user_email OR 
+    (current_setting('request.jwt.claims'::text)::json->>'email' = 'superadmin@kawanutama.com' AND status = 'PUBLISHED')
+  );
 ```
 
 Setelah SQL dijalankan, tabel MOM siap digunakan! ✅

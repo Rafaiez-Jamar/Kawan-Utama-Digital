@@ -197,6 +197,47 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     }
   }
 
+  async function updatePublishedMOM() {
+    if (!formData.id || formData.status !== 'PUBLISHED') {
+      alert('Hanya MOM published yang bisa diedit')
+      return
+    }
+
+    if (!supabase) return
+
+    try {
+      await supabase
+        .from('mom')
+        .update({ ...formData, updated_at: new Date().toISOString() })
+        .eq('id', formData.id)
+
+      alert('MOM berhasil diperbarui!')
+      setShowForm(false)
+      loadMOMList()
+    } catch (err) {
+      console.error('Error updating published MOM:', err)
+      alert('Gagal memperbarui MOM')
+    }
+  }
+
+  async function deleteMOM(momId: number | undefined) {
+    if (!momId) return
+
+    if (!confirm('Yakin ingin menghapus MOM ini?')) return
+
+    if (!supabase) return
+
+    try {
+      await supabase.from('mom').delete().eq('id', momId)
+      alert('MOM berhasil dihapus!')
+      setShowForm(false)
+      loadMOMList()
+    } catch (err) {
+      console.error('Error deleting MOM:', err)
+      alert('Gagal menghapus MOM')
+    }
+  }
+
   function handleFormChange(field: keyof MOMRecord, value: string) {
     setFormData({ ...formData, [field]: value })
   }
@@ -359,14 +400,27 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
             </label>
 
             <div className="form-actions">
-              <button className="submit-button" type="button" onClick={() => saveDraft()} disabled={isSavingDraft || !formData.client_name}>
-                💾 Simpan Draft
-              </button>
-              <button className="submit-button" type="submit" style={{ backgroundColor: '#00b894' }}>
-                <Send size={18} /> Publikasikan MOM
-              </button>
+              {formData.status === 'DRAFT' ? (
+                <>
+                  <button className="submit-button" type="button" onClick={() => saveDraft()} disabled={isSavingDraft || !formData.client_name}>
+                    💾 Simpan Draft
+                  </button>
+                  <button className="submit-button" type="submit" style={{ backgroundColor: '#00b894' }}>
+                    <Send size={18} /> Publikasikan MOM
+                  </button>
+                </>
+              ) : (userRole as string) === 'super-admin' ? (
+                  <>
+                    <button className="submit-button" type="button" onClick={() => updatePublishedMOM()} style={{ backgroundColor: '#0066cc' }}>
+                      ✏️ Update MOM
+                    </button>
+                    <button className="cancel-button" type="button" onClick={() => deleteMOM(formData.id)}>
+                      🗑️ Hapus MOM
+                    </button>
+                  </>
+                ) : null}
               <button className="cancel-button" type="button" onClick={() => setShowForm(false)}>
-                Batal
+                Tutup
               </button>
               {lastSaved && (
                 <small style={{ color: '#00b894' }}>
@@ -445,7 +499,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
                         }}
                         style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
                       >
-                        Lihat
+                        {mom.status === 'PUBLISHED' && userRole === 'super-admin' ? 'Edit / Lihat' : 'Lihat'}
                       </button>
                     </td>
                   </tr>
