@@ -33,27 +33,64 @@ ALTER TABLE public.mom ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies
 DROP POLICY IF EXISTS "Sales can create MOM" ON public.mom;
-DROP POLICY IF EXISTS "Sales can view own MOM" ON public.mom;
-DROP POLICY IF EXISTS "Published MOM visible to all" ON public.mom;
-DROP POLICY IF EXISTS "Sales can update own MOM" ON public.mom;
-DROP POLICY IF EXISTS "Super Admin full access" ON public.mom;
+DROP POLICY IF EXISTS "Users can view own draft or published MOM" ON public.mom;
+DROP POLICY IF EXISTS "Everyone can view published MOM" ON public.mom;
+DROP POLICY IF EXISTS "Sales can update own draft MOM" ON public.mom;
+DROP POLICY IF EXISTS "Super Admin can update published MOM" ON public.mom;
 
 -- Policies for MOM table
--- Sales can create MOM
+
+-- Anyone can create MOM (status defaults to DRAFT)
 CREATE POLICY "Sales can create MOM" ON public.mom
   FOR INSERT WITH CHECK (true);
 
--- Sales can view their own MOM (draft or published)
-CREATE POLICY "Sales can view own MOM" ON public.mom
-  FOR SELECT USING (created_by_email = current_user_email OR status = 'PUBLISHED');
+-- Users can view their own MOM (draft or published) OR published MOM by others
+CREATE POLICY "Users can view own draft or published MOM" ON public.mom
+  FOR SELECT USING (
+    created_by_email = current_user_email OR status = 'PUBLISHED'
+  );
 
--- Sales can update their own DRAFT MOM
-CREATE POLICY "Sales can update own MOM" ON public.mom
-  FOR UPDATE USING (created_by_email = current_user_email AND status = 'DRAFT');
+-- Sales can update their own DRAFT MOM only
+CREATE POLICY "Sales can update own draft MOM" ON public.mom
+  FOR UPDATE USING (
+    created_by_email = current_user_email AND status = 'DRAFT'
+  );
 
--- Everyone can view published MOM
-CREATE POLICY "Published MOM visible to all" ON public.mom
-  FOR SELECT USING (status = 'PUBLISHED');
+-- Super Admin can update published MOM (but not DRAFT of others)
+CREATE POLICY "Super Admin can update published MOM" ON public.mom
+  FOR UPDATE USING (
+    status = 'PUBLISHED' OR created_by_email = current_user_email
+  );
+
+-- Anyone can delete their own MOM
+CREATE POLICY "Users can delete own MOM" ON public.mom
+  FOR DELETE USING (created_by_email = current_user_email);
 ```
 
 Setelah SQL dijalankan, tabel MOM siap digunakan! ✅
+
+## MOM Draft System Penjelasan:
+
+### **Auto-Save ke localStorage (seperti WhatsApp)**
+- Saat user ketik, draft otomatis tersimpan di browser
+- Persisten walaupun browser ditutup atau logout
+- Data tidak hilang dan bisa dilanjutkan kapan saja
+
+### **Tombol "Simpan Draft"**
+- Simpan draft ke Supabase database
+- Status tetap DRAFT
+- **Hanya creator yang bisa lihat**, bahkan Super Admin tidak bisa
+- Bisa diakses di perangkat lain setelah login
+
+### **Tombol "Publikasikan MOM"**
+- Ubah status dari DRAFT → PUBLISHED
+- Baru bisa dilihat oleh:
+  - Product: Published MOM terkait spesifikasi
+  - Admin: Semua published MOM untuk audit
+  - Super Admin: Semua published MOM dengan akses penuh
+
+### **Privacy Rules**
+- ❌ Super Admin TIDAK bisa lihat DRAFT orang lain
+- ❌ Admin TIDAK bisa lihat DRAFT orang lain
+- ✅ Only PUBLISHED MOM yang bisa dilihat orang lain
+

@@ -44,6 +44,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     deadline: '',
   })
   const [lastSaved, setLastSaved] = useState<string | null>(null)
+  const [isSavingDraft, setIsSavingDraft] = useState(false)
 
   // Load MOM list
   useEffect(() => {
@@ -84,18 +85,15 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     try {
       let query = supabase.from('mom').select('*')
 
-      // Filter based on role
+      // Filter based on role and status
       if (userRole === 'sales') {
-        // Sales sees only their own MOM
+        // Sales sees only their own MOM (both DRAFT and PUBLISHED)
         query = query.eq('created_by_email', userEmail)
-      } else if (userRole === 'product') {
-        // Product sees only published MOM
-        query = query.eq('status', 'PUBLISHED')
-      } else if (userRole === 'admin') {
-        // Admin sees all published MOM
+      } else {
+        // Product, Admin, and Super Admin see only PUBLISHED MOM
+        // Even Super Admin cannot see DRAFT of others
         query = query.eq('status', 'PUBLISHED')
       }
-      // Super Admin sees all
 
       const { data, error } = await query.order('created_at', { ascending: false })
 
@@ -115,19 +113,23 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     if (!supabase || !formData.client_name) return
 
     try {
-      // Save to localStorage
+      setIsSavingDraft(true)
+
+      // Always save to localStorage first (auto-save like WhatsApp)
       localStorage.setItem(`mom-draft-${userEmail}`, JSON.stringify(formData))
 
-      // Save to Supabase if has ID
+      // Save to Supabase if not already saved
       if (formData.id) {
+        // Update existing draft
         await supabase
           .from('mom')
-          .update({ ...formData, updated_at: new Date().toISOString() })
+          .update({ ...formData, status: 'DRAFT', updated_at: new Date().toISOString() })
           .eq('id', formData.id)
       } else {
+        // Create new draft in database
         const { data } = await supabase
           .from('mom')
-          .insert([{ ...formData, created_at: new Date().toISOString() }])
+          .insert([{ ...formData, status: 'DRAFT', created_at: new Date().toISOString() }])
           .select()
 
         if (data && data[0]) {
@@ -136,9 +138,11 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       }
 
       setLastSaved(new Date().toLocaleTimeString('id-ID'))
-      setTimeout(() => setLastSaved(null), 3000)
+      setTimeout(() => setLastSaved(null), 2000)
     } catch (err) {
       console.error('Error saving draft:', err)
+    } finally {
+      setIsSavingDraft(false)
     }
   }
 
@@ -159,8 +163,10 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       }
 
       if (formData.id) {
+        // Update existing draft to published
         await supabase.from('mom').update(publishedData).eq('id', formData.id)
       } else {
+        // Create and publish immediately
         await supabase.from('mom').insert([publishedData])
       }
 
@@ -353,7 +359,10 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
             </label>
 
             <div className="form-actions">
-              <button className="submit-button" type="submit">
+              <button className="submit-button" type="button" onClick={() => saveDraft()} disabled={isSavingDraft || !formData.client_name}>
+                💾 Simpan Draft
+              </button>
+              <button className="submit-button" type="submit" style={{ backgroundColor: '#00b894' }}>
                 <Send size={18} /> Publikasikan MOM
               </button>
               <button className="cancel-button" type="button" onClick={() => setShowForm(false)}>
@@ -361,15 +370,14 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
               </button>
               {lastSaved && (
                 <small style={{ color: '#00b894' }}>
-                  ✓ Tersimpan {lastSaved}
+                  ✓ Draft tersimpan {lastSaved}
                 </small>
               )}
             </div>
 
             {formData.status === 'DRAFT' && (
               <p className="form-hint">
-                <AlertCircle size={14} /> Draft Anda otomatis disimpan setiap 30 detik. Tekan "Publikasikan MOM" untuk
-                mengirim ke tim lain.
+                <AlertCircle size={14} /> Draft Anda otomatis tersimpan di perangkat ini (seperti WhatsApp). Tekan "Simpan Draft" untuk menyimpan ke database agar bisa diakses di perangkat lain. Tekan "Publikasikan MOM" untuk mengirim ke tim.
               </p>
             )}
           </form>
