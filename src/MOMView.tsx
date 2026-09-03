@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, ShieldCheck, Send, FileText, Clock, AlertCircle } from 'lucide-react'
+import { CheckCircle2, ShieldCheck, Send, FileText, Clock, AlertCircle, Pencil } from 'lucide-react'
 import { supabase } from './lib/supabase'
 
 type MOMRecord = {
@@ -197,6 +197,31 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     }
   }
 
+  async function saveMOMEdit() {
+    if (!formData.client_name || !formData.id) {
+      alert('Data tidak lengkap')
+      return
+    }
+
+    if (!supabase) return
+
+    try {
+      const updateData = {
+        ...formData,
+        updated_at: new Date().toISOString(),
+      }
+
+      await supabase.from('mom').update(updateData).eq('id', formData.id)
+
+      setShowForm(false)
+      alert('MOM berhasil diperbarui!')
+      loadMOMList()
+    } catch (err) {
+      console.error('Error updating MOM:', err)
+      alert('Gagal memperbarui MOM')
+    }
+  }
+
   function handleFormChange(field: keyof MOMRecord, value: string) {
     setFormData({ ...formData, [field]: value })
   }
@@ -384,6 +409,113 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
         </div>
       )}
 
+      {showForm && userRole === 'super-admin' && (
+        <div className="settings-grid" style={{ marginBottom: '2rem' }}>
+          <form className="create-user-panel" onSubmit={(e) => { e.preventDefault(); saveMOMEdit() }}>
+            <div className="panel-heading">
+              <div className="panel-icon">
+                <FileText size={18} />
+              </div>
+              <div>
+                <h2>Edit MOM</h2>
+                <p>
+                  <span style={{ color: '#00b894' }}>
+                    <CheckCircle2 size={14} style={{ display: 'inline', marginRight: '4px' }} />
+                    Published - Perubahan langsung disimpan
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <label>
+              Nama Client
+              <input
+                value={formData.client_name}
+                onChange={(e) => handleFormChange('client_name', e.target.value)}
+                placeholder="e.g. PT Contoh Jaya"
+                required
+              />
+            </label>
+
+            <label>
+              Tanggal Pertemuan
+              <input
+                type="date"
+                value={formData.meeting_date}
+                onChange={(e) => handleFormChange('meeting_date', e.target.value)}
+                required
+              />
+            </label>
+
+            <label>
+              Waktu Pertemuan
+              <input
+                type="time"
+                value={formData.meeting_time}
+                onChange={(e) => handleFormChange('meeting_time', e.target.value)}
+              />
+            </label>
+
+            <label>
+              Ringkasan Hasil Pertemuan
+              <textarea
+                value={formData.summary}
+                onChange={(e) => handleFormChange('summary', e.target.value)}
+                placeholder="Ringkas hasil diskusi dengan klien..."
+                rows={4}
+              />
+            </label>
+
+            <label>
+              Catatan Tambahan
+              <textarea
+                value={formData.notes}
+                onChange={(e) => handleFormChange('notes', e.target.value)}
+                placeholder="Catatan atau follow-up penting..."
+                rows={3}
+              />
+            </label>
+
+            <label>
+              Action Items / Kesimpulan
+              <textarea
+                value={formData.action_items}
+                onChange={(e) => handleFormChange('action_items', e.target.value)}
+                placeholder="Tindak lanjut yang perlu dilakukan..."
+                rows={3}
+              />
+            </label>
+
+            <label>
+              PIC (Penanggung Jawab)
+              <input
+                value={formData.pic_name}
+                onChange={(e) => handleFormChange('pic_name', e.target.value)}
+                placeholder="Nama orang yang bertanggung jawab"
+              />
+            </label>
+
+            <label>
+              Deadline
+              <input
+                type="date"
+                value={formData.deadline}
+                onChange={(e) => handleFormChange('deadline', e.target.value)}
+              />
+            </label>
+
+            <div className="form-actions">
+              <button className="submit-button" type="submit" style={{ backgroundColor: '#00b894' }}>
+                <CheckCircle2 size={18} /> Simpan Perubahan
+              </button>
+              <button className="cancel-button" type="button" onClick={() => setShowForm(false)}>
+                Batal
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       <div className="settings-grid">
         <div className="users-panel">
           <div className="panel-heading">
@@ -405,53 +537,80 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
               <p>Belum ada MOM</p>
             </div>
           ) : (
-            <table className="users-table">
-              <thead>
-                <tr>
-                  <th>Client</th>
-                  <th>Tanggal</th>
-                  <th>Status</th>
-                  <th>Dibuat oleh</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {momList.map((mom) => (
-                  <tr key={mom.id}>
-                    <td>
-                      <strong>{mom.client_name}</strong>
-                    </td>
-                    <td>{new Date(mom.meeting_date).toLocaleDateString('id-ID')}</td>
-                    <td>
-                      <span
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: '500',
-                          backgroundColor: mom.status === 'DRAFT' ? '#fff3cd' : '#d4edda',
-                          color: mom.status === 'DRAFT' ? '#856404' : '#155724',
-                        }}
-                      >
-                        {mom.status}
-                      </span>
-                    </td>
-                    <td>{mom.created_by_name}</td>
-                    <td>
-                      <button
-                        onClick={() => {
-                          setFormData(mom)
-                          setShowForm(true)
-                        }}
-                        style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
-                      >
-                        Lihat
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+           <div style={{ display: 'grid', gap: '7px' }}>
+             {momList.map((mom) => (
+               <div
+                 key={mom.id}
+                 style={{
+                   display: 'flex',
+                   alignItems: 'center',
+                   gap: '10px',
+                   border: '1px solid #edf1f5',
+                   borderRadius: '6px',
+                   padding: '12px',
+                   backgroundColor: '#fff',
+                 }}
+               >
+                 <div style={{ display: 'grid', gap: '3px', flex: 1 }}>
+                   <strong style={{ fontSize: '12px', color: 'var(--ink)' }}>
+                     {mom.client_name}
+                   </strong>
+                   <small style={{ color: '#8a98a6', fontSize: '10px' }}>
+                     {new Date(mom.meeting_date).toLocaleDateString('id-ID')} • {mom.created_by_name}
+                   </small>
+                 </div>
+                  
+                 <span
+                   style={{
+                     display: 'inline-flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     padding: '5px 8px',
+                     borderRadius: '12px',
+                     fontSize: '9px',
+                     fontWeight: 700,
+                     backgroundColor: mom.status === 'DRAFT' ? '#fff3cd' : '#d4edda',
+                     color: mom.status === 'DRAFT' ? '#856404' : '#155724',
+                     textTransform: 'capitalize',
+                   }}
+                 >
+                   {mom.status}
+                 </span>
+
+                 <button
+                   onClick={() => {
+                     setFormData(mom)
+                     setShowForm(true)
+                   }}
+                   style={{
+                     display: 'flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     gap: '4px',
+                     border: 0,
+                     borderRadius: '5px',
+                     padding: userRole === 'super-admin' ? '6px 8px' : '6px',
+                     color: userRole === 'super-admin' ? '#2868a9' : '#718397',
+                     background: userRole === 'super-admin' ? '#eaf3fd' : 'transparent',
+                     cursor: 'pointer',
+                     fontSize: '12px',
+                     fontWeight: 600,
+                   }}
+                   onMouseEnter={(e) => {
+                     e.currentTarget.style.color = '#2868a9'
+                     e.currentTarget.style.background = '#eaf3fd'
+                   }}
+                   onMouseLeave={(e) => {
+                     e.currentTarget.style.color = userRole === 'super-admin' ? '#2868a9' : '#718397'
+                     e.currentTarget.style.background = userRole === 'super-admin' ? '#eaf3fd' : 'transparent'
+                   }}
+                 >
+                   {userRole === 'super-admin' && <Pencil size={14} />}
+                   {userRole === 'super-admin' ? 'Edit' : 'Lihat'}
+                 </button>
+               </div>
+             ))}
+           </div>
           )}
         </div>
       </div>
