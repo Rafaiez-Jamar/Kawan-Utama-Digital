@@ -23,7 +23,7 @@ type MOMRecord = {
 type MOMViewProps = {
   userName: string
   userEmail: string
-  userRole: 'sales' | 'product' | 'admin' | 'super-admin'
+  userRole: 'sales' | 'product' | 'delivery' | 'tech' | 'admin' | 'super-admin'
 }
 
 export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
@@ -91,6 +91,11 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
 
   async function loadMOMList() {
     if (!supabase) {
+      try {
+        setMomList(JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[])
+      } catch (err) {
+        console.error('Failed to load local MOM:', err)
+      }
       setLoading(false)
       return
     }
@@ -167,8 +172,21 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       alert('Mohon lengkapi nama client terlebih dahulu')
       return
     }
+    if (userRole !== 'super-admin' && isMomDeadlinePassed(formData.meeting_date)) {
+      alert('Batas pengisian MOM untuk tanggal tersebut sudah lewat pukul 00.00.')
+      return
+    }
 
-    if (!supabase) return
+    if (!supabase) {
+      const publishedData: MOMRecord = { ...formData, status: 'PUBLISHED', published_at: new Date().toISOString(), updated_at: new Date().toISOString(), id: formData.id ?? Date.now() }
+      const current = JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[]
+      localStorage.setItem('kawan-mom', JSON.stringify([publishedData, ...current.filter((item) => item.id !== publishedData.id)]))
+      localStorage.removeItem(`mom-draft-${userEmail}`)
+      setMomList([publishedData, ...current.filter((item) => item.id !== publishedData.id)])
+      setShowForm(false)
+      alert('MOM berhasil dipublikasikan!')
+      return
+    }
 
     try {
       const publishedData = {
@@ -220,7 +238,21 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       return
     }
 
-    if (!supabase) return
+    if (userRole !== 'super-admin') {
+      alert('Hanya Super Admin yang dapat mengedit MOM yang sudah dipublikasikan.')
+      return
+    }
+
+    if (!supabase) {
+      const current = JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[]
+      const updated = { ...formData, updated_at: new Date().toISOString() }
+      const next = current.map((item) => item.id === formData.id ? updated : item)
+      localStorage.setItem('kawan-mom', JSON.stringify(next))
+      setMomList(next)
+      setShowForm(false)
+      alert('MOM berhasil diperbarui!')
+      return
+    }
 
     try {
       await supabase
@@ -242,7 +274,20 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
 
     if (!confirm('Yakin ingin menghapus MOM ini?')) return
 
-    if (!supabase) return
+    if (userRole !== 'super-admin') {
+      alert('Hanya Super Admin yang dapat menghapus MOM.')
+      return
+    }
+
+    if (!supabase) {
+      const current = JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[]
+      const next = current.filter((item) => item.id !== momId)
+      localStorage.setItem('kawan-mom', JSON.stringify(next))
+      setMomList(next)
+      setShowForm(false)
+      alert('MOM berhasil dihapus!')
+      return
+    }
 
     try {
       await supabase.from('mom').delete().eq('id', momId)
@@ -253,6 +298,14 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       console.error('Error deleting MOM:', err)
       alert('Gagal menghapus MOM')
     }
+
+  }
+
+  function isMomDeadlinePassed(meetingDate: string) {
+    if (!meetingDate) return false
+    const deadline = new Date(`${meetingDate}T00:00:00`)
+    deadline.setDate(deadline.getDate() + 1)
+    return new Date() >= deadline
   }
 
   function handleFormChange(field: keyof MOMRecord, value: string) {
@@ -442,7 +495,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
               </h3>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>PIC (Penanggung Jawab)</span>
+                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>PIC (Penanggung Jawab) <small style={{ color: '#888', fontWeight: '400' }}>- opsional</small></span>
                   <input
                     value={formData.pic_name}
                     onChange={(e) => handleFormChange('pic_name', e.target.value)}
@@ -597,7 +650,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
 
             {formData.status === 'DRAFT' && (
               <p className="form-hint">
-                <AlertCircle size={14} /> Draft Anda otomatis tersimpan di perangkat ini (seperti WhatsApp). Tekan "Simpan Draft" untuk menyimpan ke database agar bisa diakses di perangkat lain. Tekan "Publikasikan MOM" untuk mengirim ke tim.
+                <AlertCircle size={14} /> Draft tersimpan otomatis di perangkat ini. Publikasi MOM dibatasi sampai pukul 00.00 pada hari berikutnya; Super Admin tetap dapat mengedit atau menghapus MOM kapan saja.
               </p>
             )}
           </form>
