@@ -55,6 +55,7 @@ export default async function handler(request, response) {
     headers.set(name, Array.isArray(value) ? value.join(', ') : value)
   }
   headers.set('x-api-proxy-secret', proxySecret)
+  headers.set('ngrok-skip-browser-warning', 'true')
   const forwardedFor = request.headers['x-forwarded-for']
   const clientIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0]?.trim()
   if (clientIp) headers.set('x-proxy-client-ip', clientIp)
@@ -73,6 +74,11 @@ export default async function handler(request, response) {
       redirect: 'manual',
       signal: AbortSignal.timeout(25_000),
     })
+
+    if (upstream.headers.has('ngrok-error-code')) {
+      respondError(response, 502, 'Ngrok menampilkan halaman peringatan. Pastikan tunnel mengizinkan request API.')
+      return
+    }
 
     response.statusCode = upstream.status
     upstream.headers.forEach((value, name) => {
