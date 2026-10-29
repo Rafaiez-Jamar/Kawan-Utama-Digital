@@ -11,6 +11,11 @@ export type WorkspaceRow<T = unknown> = {
   payload: T
 }
 
+function workspaceRecordPath(module: WorkspaceModule, recordId: string) {
+  const query = new URLSearchParams({ module, record_id: recordId })
+  return `/workspace/record?${query}`
+}
+
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
     method,
@@ -59,9 +64,9 @@ export const localApi = {
   salesTargets: (start: string, end: string) => requestArray<SalesTarget>(`/sales-targets?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
   updateSalesTarget: (id: string, target: number) => request<SalesTarget>(`/sales-targets/${encodeURIComponent(id)}`, 'PATCH', { target }),
   attendance: (start: string, end: string, includePhotos = false) => requestArray<Record<string, unknown>>(`/attendance?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${includePhotos ? '&photos=1' : ''}`),
-  attendancePhoto: (id: string) => request<{ photo_data: string | null }>(`/attendance/${encodeURIComponent(id)}/photo`),
+  attendancePhoto: (id: string) => request<{ photo_data: string | null }>(`/attendance/photo?id=${encodeURIComponent(id)}`),
   saveAttendance: (payload: Record<string, unknown>) => request<{ id: string; created_at: string }>('/attendance', 'POST', payload),
-  updateAttendancePhoto: (id: string, photo_data: string) => request<{ ok: boolean }>(`/attendance/${encodeURIComponent(id)}/photo`, 'PATCH', { photo_data }),
+  updateAttendancePhoto: (id: string, photo_data: string) => request<{ ok: boolean }>('/attendance/photo', 'PATCH', { id, photo_data }),
   presence: () => request<Array<Record<string, unknown>>>('/presence'),
   updatePresence: (sessionId: string, is_online: boolean) => request<{ ok: boolean }>(`/presence/${encodeURIComponent(sessionId)}`, 'PUT', { is_online }),
   mom: <T>(id?: number) => id === undefined ? requestArray<T>('/mom') : request<T>(`/mom?id=${encodeURIComponent(id)}`),
@@ -82,7 +87,7 @@ export async function loadDeliveryWorkspaceRows(modules: WorkspaceModule[]) {
 }
 
 export async function loadWorkspaceRow(module: WorkspaceModule, recordId: string) {
-  return request<WorkspaceRow | null>(`/workspace/${encodeURIComponent(module)}/${encodeURIComponent(recordId)}`)
+  return request<WorkspaceRow | null>(workspaceRecordPath(module, recordId))
 }
 
 export async function saveWorkspaceRow<T>(row: WorkspaceRow<T>) {
@@ -90,5 +95,5 @@ export async function saveWorkspaceRow<T>(row: WorkspaceRow<T>) {
 }
 
 export async function deleteWorkspaceRow(module: WorkspaceModule, recordId: string) {
-  await request<{ ok: boolean }>(`/workspace/${encodeURIComponent(module)}/${encodeURIComponent(recordId)}`, 'DELETE')
+  await request<{ ok: boolean }>(workspaceRecordPath(module, recordId), 'DELETE')
 }

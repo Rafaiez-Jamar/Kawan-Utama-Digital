@@ -434,6 +434,27 @@ app.get('/api/attendance/:id/photo', authenticate, async (request, response, nex
   }
 })
 
+app.get('/api/attendance/photo', authenticate, async (request, response, next) => {
+  try {
+    const id = typeof request.query.id === 'string' ? request.query.id : ''
+    if (!id) fail(400, 'ID absensi wajib diisi.')
+    const values = [id]
+    let access = ''
+    if (!['admin', 'super-admin'].includes(request.user.role)) {
+      values.push(request.user.email)
+      access = ' AND lower(user_email) = lower($2)'
+    }
+    const { rows } = await database.query(
+      `SELECT photo_data FROM public.attendance WHERE id = $1${access}`,
+      values,
+    )
+    if (!rows[0]) fail(404, 'Data foto absensi tidak ditemukan.')
+    response.json(rows[0])
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.post('/api/attendance', authenticate, async (request, response, next) => {
   try {
     const { photo_data, location_label, latitude, longitude, created_at } = request.body ?? {}
@@ -455,6 +476,29 @@ app.patch('/api/attendance/:id/photo', authenticate, async (request, response, n
     const photo = request.body?.photo_data
     if (typeof photo !== 'string' || !photo.startsWith('data:image/')) fail(400, 'Foto absensi tidak valid.')
     const values = [request.params.id, photo]
+    let access = ''
+    if (!['admin', 'super-admin'].includes(request.user.role)) {
+      values.push(request.user.email)
+      access = ' AND lower(user_email) = lower($3)'
+    }
+    const result = await database.query(
+      `UPDATE public.attendance SET photo_data = $2 WHERE id = $1${access}`,
+      values,
+    )
+    if (!result.rowCount) fail(404, 'Data absensi tidak ditemukan atau tidak dapat diubah.')
+    response.json({ ok: true })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/attendance/photo', authenticate, async (request, response, next) => {
+  try {
+    const id = typeof request.body?.id === 'string' ? request.body.id : ''
+    const photo = request.body?.photo_data
+    if (!id) fail(400, 'ID absensi wajib diisi.')
+    if (typeof photo !== 'string' || !photo.startsWith('data:image/')) fail(400, 'Foto absensi tidak valid.')
+    const values = [id, photo]
     let access = ''
     if (!['admin', 'super-admin'].includes(request.user.role)) {
       values.push(request.user.email)
@@ -611,6 +655,23 @@ app.get('/api/workspace', authenticate, async (request, response, next) => {
   }
 })
 
+app.get('/api/workspace/record', authenticate, async (request, response, next) => {
+  try {
+    const module = typeof request.query.module === 'string' ? request.query.module : ''
+    const recordId = typeof request.query.record_id === 'string' ? request.query.record_id : ''
+    if (!module || !recordId || !moduleAccess[request.user.role]?.has(module)) fail(400, 'Modul atau ID data workspace tidak valid.')
+    const { rows } = await database.query(
+      'SELECT module, record_id, owner_email, target_team, payload FROM public.workspace_data WHERE module = $1 AND record_id = $2',
+      [module, recordId],
+    )
+    const row = rows[0]
+    if (!row || !canReadWorkspace(request.user, row)) return response.json(null)
+    response.json(row)
+  } catch (error) {
+    next(error)
+  }
+})
+
 app.get('/api/workspace/:module/:recordId', authenticate, async (request, response, next) => {
   try {
     const { rows } = await database.query(
@@ -657,6 +718,23 @@ app.put('/api/workspace', authenticate, async (request, response, next) => {
     )
     if (!rows[0]) fail(409, 'Status WIN bersifat permanen dan tidak dapat diubah.')
     response.json(rows[0])
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/workspace/record', authenticate, async (request, response, next) => {
+  try {
+    const module = typeof request.query.module === 'string' ? request.query.module : ''
+    const recordId = typeof request.query.record_id === 'string' ? request.query.record_id : ''
+    if (!module || !recordId || !moduleAccess[request.user.role]?.has(module)) fail(400, 'Modul atau ID data workspace tidak valid.')
+    const { rows } = await database.query(
+      'SELECT module, record_id, owner_email, target_team, payload FROM public.workspace_data WHERE module = $1 AND record_id = $2',
+      [module, recordId],
+    )
+    if (!rows[0] || !canWriteWorkspace(request.user, rows[0])) fail(404, 'Data tidak ditemukan atau tidak dapat dihapus.')
+    await database.query('DELETE FROM public.workspace_data WHERE module = $1 AND record_id = $2', [module, recordId])
+    response.json({ ok: true })
   } catch (error) {
     next(error)
   }
