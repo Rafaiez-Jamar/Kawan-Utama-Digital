@@ -48,7 +48,7 @@ export default async function handler(request, response) {
   }
 
   const incomingUrl = new URL(request.url ?? '/', 'https://vercel.invalid')
-  const apiPath = incomingUrl.pathname.replace(/^\/api(?=\/|$)/, '') || '/'
+  const apiPath = incomingUrl.pathname || '/api'
   const headers = new Headers()
   for (const [name, value] of Object.entries(request.headers)) {
     if (value === undefined || ['host', 'connection', 'content-length', 'transfer-encoding', 'x-api-proxy-secret'].includes(name.toLowerCase())) continue
