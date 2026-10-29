@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, ShieldCheck, Send, FileText, Clock, AlertCircle } from 'lucide-react'
-import { supabase } from './lib/supabase'
+import { ArrowUpRight, CalendarDays, CheckCircle2, Clock, FileText, Pencil, Save, ShieldCheck, Send, Trash2, AlertCircle } from 'lucide-react'
+import { localApi } from './lib/localApi'
 
 type MOMRecord = {
   id?: number
@@ -23,12 +23,19 @@ type MOMRecord = {
 type MOMViewProps = {
   userName: string
   userEmail: string
-  userRole: 'sales' | 'product' | 'delivery' | 'tech' | 'admin' | 'super-admin'
+  userRole: 'sales' | 'product' | 'admin' | 'super-admin'
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') return error.message
+  return 'Kesalahan tidak diketahui.'
 }
 
 export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
   const [momList, setMomList] = useState<MOMRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [draftLoaded, setDraftLoaded] = useState(false)
   const [formData, setFormData] = useState<MOMRecord>({
@@ -77,7 +84,7 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     }
   }, [userEmail])
 
-  // Auto-load DRAFT from Supabase when momList is fetched
+  // Auto-load the saved draft when the user's MOM list is fetched.
   useEffect(() => {
     if (userRole === 'sales' && momList.length > 0 && !draftLoaded && !formData.client_name) {
       const draft = momList.find(m => m.status === 'DRAFT')
@@ -90,78 +97,41 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
   }, [momList, userRole, draftLoaded, formData.client_name])
 
   async function loadMOMList() {
-    if (!supabase) {
-      try {
-        setMomList(JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[])
-      } catch (err) {
-        console.error('Failed to load local MOM:', err)
-      }
-      setLoading(false)
-      return
-    }
-
     try {
-      let query = supabase.from('mom').select('*')
-
-      // Filter based on role and status
-      if (userRole === 'sales') {
-        // Sales sees only their own MOM (both DRAFT and PUBLISHED)
-        query = query.eq('created_by_email', userEmail)
-      } else {
-        // Product, Admin, and Super Admin see only PUBLISHED MOM
-        // Even Super Admin cannot see DRAFT of others
-        query = query.eq('status', 'PUBLISHED')
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Error loading MOM:', error)
-      } else {
-        setMomList(data || [])
-      }
+      const data = await localApi.mom<MOMRecord[]>()
+      setMomList(data)
+      setErrorMessage('')
     } catch (err) {
       console.error('Failed to load MOM:', err)
+      setErrorMessage(`Gagal memuat data MOM: ${getErrorMessage(err)}`)
     } finally {
       setLoading(false)
     }
   }
 
   async function saveDraft() {
-    if (!supabase || !formData.client_name) return
+    if (!formData.client_name) return
 
     try {
       setIsSavingDraft(true)
-
-      // Always save to localStorage first (auto-save like WhatsApp)
-      localStorage.setItem(`mom-draft-${userEmail}`, JSON.stringify(formData))
-
-      // Save to Supabase if not already saved
+      setErrorMessage('')
+      let draft: MOMRecord = { ...formData, status: 'DRAFT' }
       if (formData.id) {
-        // Update existing draft
-        await supabase
-          .from('mom')
-          .update({ ...formData, status: 'DRAFT', updated_at: new Date().toISOString() })
-          .eq('id', formData.id)
+        await localApi.updateMom(formData.id, { ...draft, updated_at: new Date().toISOString() })
       } else {
-        // Create new draft in database
-        const { data } = await supabase
-          .from('mom')
-          .insert([{ ...formData, status: 'DRAFT', created_at: new Date().toISOString() }])
-          .select()
-
-        if (data && data[0]) {
-          setFormData({ ...formData, id: data[0].id })
-        }
+        const data = await localApi.createMom<MOMRecord>({ ...draft, created_at: new Date().toISOString() })
+        draft = { ...draft, id: data.id }
       }
 
+      setFormData(draft)
+      setMomList((current) => current.some((mom) => mom.id === draft.id)
+        ? current.map((mom) => mom.id === draft.id ? draft : mom)
+        : [draft, ...current])
       setLastSaved(new Date().toLocaleTimeString('id-ID'))
-      setTimeout(() => setLastSaved(null), 2000)
-
-      // Refresh MOM list so draft appears in the table
-      await loadMOMList()
+      window.setTimeout(() => setLastSaved(null), 2500)
     } catch (err) {
       console.error('Error saving draft:', err)
+      setErrorMessage(`Gagal menyimpan draft: ${getErrorMessage(err)}`)
     } finally {
       setIsSavingDraft(false)
     }
@@ -172,23 +142,9 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       alert('Mohon lengkapi nama client terlebih dahulu')
       return
     }
-    if (userRole !== 'super-admin' && isMomDeadlinePassed(formData.meeting_date)) {
-      alert('Batas pengisian MOM untuk tanggal tersebut sudah lewat pukul 00.00.')
-      return
-    }
-
-    if (!supabase) {
-      const publishedData: MOMRecord = { ...formData, status: 'PUBLISHED', published_at: new Date().toISOString(), updated_at: new Date().toISOString(), id: formData.id ?? Date.now() }
-      const current = JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[]
-      localStorage.setItem('kawan-mom', JSON.stringify([publishedData, ...current.filter((item) => item.id !== publishedData.id)]))
-      localStorage.removeItem(`mom-draft-${userEmail}`)
-      setMomList([publishedData, ...current.filter((item) => item.id !== publishedData.id)])
-      setShowForm(false)
-      alert('MOM berhasil dipublikasikan!')
-      return
-    }
 
     try {
+      setErrorMessage('')
       const publishedData = {
         ...formData,
         status: 'PUBLISHED',
@@ -197,17 +153,13 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       }
 
       if (formData.id) {
-        // Update existing draft to published
-        await supabase.from('mom').update(publishedData).eq('id', formData.id)
+        await localApi.updateMom(formData.id, publishedData)
       } else {
-        // Create and publish immediately
-        await supabase.from('mom').insert([publishedData])
+        await localApi.createMom<MOMRecord>(publishedData)
       }
 
-      // Clear localStorage
       localStorage.removeItem(`mom-draft-${userEmail}`)
 
-      // Reset form
       setFormData({
         created_by_email: userEmail,
         created_by_name: userName,
@@ -223,12 +175,11 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       })
 
       setShowForm(false)
-      setDraftLoaded(false) // Reset so next draft can be auto-loaded
       alert('MOM berhasil dipublikasikan!')
       loadMOMList()
     } catch (err) {
       console.error('Error publishing MOM:', err)
-      alert('Gagal mempublikasikan MOM')
+      setErrorMessage(`Gagal mempublikasikan MOM: ${getErrorMessage(err)}`)
     }
   }
 
@@ -238,34 +189,16 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
       return
     }
 
-    if (userRole !== 'super-admin') {
-      alert('Hanya Super Admin yang dapat mengedit MOM yang sudah dipublikasikan.')
-      return
-    }
-
-    if (!supabase) {
-      const current = JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[]
-      const updated = { ...formData, updated_at: new Date().toISOString() }
-      const next = current.map((item) => item.id === formData.id ? updated : item)
-      localStorage.setItem('kawan-mom', JSON.stringify(next))
-      setMomList(next)
-      setShowForm(false)
-      alert('MOM berhasil diperbarui!')
-      return
-    }
-
     try {
-      await supabase
-        .from('mom')
-        .update({ ...formData, updated_at: new Date().toISOString() })
-        .eq('id', formData.id)
+      setErrorMessage('')
+      await localApi.updateMom(formData.id, { ...formData, updated_at: new Date().toISOString() })
 
       alert('MOM berhasil diperbarui!')
       setShowForm(false)
       loadMOMList()
     } catch (err) {
       console.error('Error updating published MOM:', err)
-      alert('Gagal memperbarui MOM')
+      setErrorMessage(`Gagal memperbarui MOM: ${getErrorMessage(err)}`)
     }
   }
 
@@ -274,38 +207,16 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
 
     if (!confirm('Yakin ingin menghapus MOM ini?')) return
 
-    if (userRole !== 'super-admin') {
-      alert('Hanya Super Admin yang dapat menghapus MOM.')
-      return
-    }
-
-    if (!supabase) {
-      const current = JSON.parse(localStorage.getItem('kawan-mom') ?? '[]') as MOMRecord[]
-      const next = current.filter((item) => item.id !== momId)
-      localStorage.setItem('kawan-mom', JSON.stringify(next))
-      setMomList(next)
-      setShowForm(false)
-      alert('MOM berhasil dihapus!')
-      return
-    }
-
     try {
-      await supabase.from('mom').delete().eq('id', momId)
+      setErrorMessage('')
+      await localApi.deleteMom(momId)
       alert('MOM berhasil dihapus!')
       setShowForm(false)
       loadMOMList()
     } catch (err) {
       console.error('Error deleting MOM:', err)
-      alert('Gagal menghapus MOM')
+      setErrorMessage(`Gagal menghapus MOM: ${getErrorMessage(err)}`)
     }
-
-  }
-
-  function isMomDeadlinePassed(meetingDate: string) {
-    if (!meetingDate) return false
-    const deadline = new Date(`${meetingDate}T00:00:00`)
-    deadline.setDate(deadline.getDate() + 1)
-    return new Date() >= deadline
   }
 
   function handleFormChange(field: keyof MOMRecord, value: string) {
@@ -340,53 +251,51 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
   }
 
   return (
-    <section className="dashboard-content">
-      <div className="settings-header">
-        <div>
-          <p className="eyebrow">Minutes of Meeting</p>
-          <h1>Kelola Hasil Pertemuan.</h1>
-          <p className="muted">
-            {userRole === 'sales'
-              ? 'Catat hasil pertemuan dengan klien dan buat laporan MOM.'
-              : 'Lihat dan tinjau laporan MOM dari tim sales.'}
-          </p>
+    <section className="dashboard-content mom-view">
+      <div className="mom-hero">
+        <div className="mom-hero-copy">
+          <p className="eyebrow">Minutes of Meeting <span> / </span> Workspace archive</p>
+          <h1>Setiap percakapan<br /><em>punya arah.</em></h1>
+          <p>{userRole === 'sales' ? 'Simpan keputusan, catatan, dan tindak lanjut dari setiap pertemuan.' : 'Baca perkembangan klien dan tindak lanjut terbaru dari tim sales.'}</p>
         </div>
-        <span className="access-note">
-          <ShieldCheck size={17} />
-          <span>
-            <strong>{userRole === 'sales' ? 'Sales' : userRole === 'product' ? 'Product' : userRole === 'admin' ? 'Admin' : 'Super Admin'}</strong>
-            <small>Auto-save enabled</small>
-          </span>
-        </span>
+        <div className="mom-hero-side">
+          <span className="mom-role-mark"><ShieldCheck size={17} /> {userRole === 'sales' ? 'Sales' : userRole === 'product' ? 'Product' : userRole === 'admin' ? 'Admin' : 'Super Admin'}</span>
+          {userRole === 'sales' && !showForm && (
+            <button className="mom-create-button" onClick={handleNewMOM}><FileText size={17} /> Buat MOM Baru <ArrowUpRight size={16} /></button>
+          )}
+        </div>
+        <div className="mom-hero-index" aria-hidden="true">MOM<span> / 01</span></div>
       </div>
 
-      {userRole === 'sales' && !showForm && (
-        <button className="submit-button" onClick={handleNewMOM} style={{ marginBottom: '2rem' }}>
-          <FileText size={18} /> Buat MOM Baru
-        </button>
-      )}
+      <div className="mom-overview-strip" aria-label="Ringkasan MOM">
+        <div className="mom-stat"><span>Total laporan</span><strong>{momList.length.toString().padStart(2, '0')}</strong><small>Arsip workspace</small></div>
+        <div className="mom-stat"><span>Published</span><strong>{momList.filter((mom) => mom.status === 'PUBLISHED').length.toString().padStart(2, '0')}</strong><small>Siap ditinjau tim</small></div>
+        <div className="mom-stat"><span>Draft</span><strong>{momList.filter((mom) => mom.status === 'DRAFT').length.toString().padStart(2, '0')}</strong><small>Tersimpan untuk dilanjutkan</small></div>
+        <div className="mom-auto-save"><span className="mom-live-dot" /> {userRole === 'sales' ? 'Draft tersimpan otomatis' : 'Arsip MOM terpublikasi'}</div>
+      </div>
 
-      {showForm && userRole === 'sales' && (
-        <div className="settings-grid" style={{ marginBottom: '2rem' }}>
-          <form className="create-user-panel" onSubmit={(e) => { e.preventDefault(); publishMOM() }} style={{ maxWidth: '900px' }}>
-            {/* Header */}
-            <div className="panel-heading" style={{ background: formData.status === 'DRAFT' ? 'linear-gradient(135deg, #fff8e6 0%, #ffe6cc 100%)' : 'linear-gradient(135deg, #e6f9f0 0%, #ccf0e0 100%)', borderBottom: `3px solid ${formData.status === 'DRAFT' ? '#ff9500' : '#00b894'}` }}>
-              <div className="panel-icon" style={{ backgroundColor: formData.status === 'DRAFT' ? '#ff9500' : '#00b894', color: 'white' }}>
-                <FileText size={20} />
+      {errorMessage && <p className="form-hint" role="alert" style={{ color: '#2868a9', justifyContent: 'flex-start', marginBottom: 16 }}>{errorMessage}</p>}
+
+      {showForm && (userRole === 'sales' || (userRole === 'super-admin' && formData.status === 'PUBLISHED')) && (
+        <div className="mom-form-wrap">
+          <form className="create-user-panel mom-form-panel" onSubmit={(e) => { e.preventDefault(); publishMOM() }}>
+            <div className="panel-heading">
+              <div className="panel-icon">
+                <FileText size={18} />
               </div>
               <div>
-                <h2 style={{ marginBottom: '4px', color: '#1a1a1a' }}>
+                <h2>
                   {formData.id ? 'Edit MOM Draft' : 'Buat MOM Baru'}
                 </h2>
-                <p style={{ margin: 0 }}>
+                <p>
                   {formData.status === 'DRAFT' ? (
-                    <span style={{ color: '#ff9500', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Clock size={14} />
+                    <span style={{ color: '#397aca' }}>
+                      <Clock size={14} style={{ display: 'inline', marginRight: '4px' }} />
                       Draft - Hanya Anda yang bisa melihat
                     </span>
                   ) : (
-                    <span style={{ color: '#00b894', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <CheckCircle2 size={14} />
+                    <span style={{ color: '#2868a9' }}>
+                      <CheckCircle2 size={14} style={{ display: 'inline', marginRight: '4px' }} />
                       Published - Terlihat oleh tim lain
                     </span>
                   )}
@@ -394,337 +303,139 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
               </div>
             </div>
 
-            {/* Meeting Info Section */}
-            <div style={{ padding: '2rem', borderBottom: '2px solid #f0f0f0' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: '#666', letterSpacing: '0.5px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#ff9500' }}></div>
-                Informasi Pertemuan
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Nama Client *</span>
-                  <input
-                    value={formData.client_name}
-                    onChange={(e) => handleFormChange('client_name', e.target.value)}
-                    placeholder="e.g. PT Contoh Jaya"
-                    required
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', transition: 'all 0.2s' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#ff9500'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Tanggal Pertemuan *</span>
-                  <input
-                    type="date"
-                    value={formData.meeting_date}
-                    onChange={(e) => handleFormChange('meeting_date', e.target.value)}
-                    required
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#ff9500'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Waktu Pertemuan</span>
-                  <input
-                    type="time"
-                    value={formData.meeting_time}
-                    onChange={(e) => handleFormChange('meeting_time', e.target.value)}
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#ff9500'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
-              </div>
-            </div>
+            <label>
+              Nama Client
+              <input
+                value={formData.client_name}
+                onChange={(e) => handleFormChange('client_name', e.target.value)}
+                placeholder="e.g. PT Contoh Jaya"
+                required
+              />
+            </label>
 
-            {/* Content Section */}
-            <div style={{ padding: '2rem', borderBottom: '2px solid #f0f0f0' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: '#666', letterSpacing: '0.5px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#0066cc' }}></div>
-                Konten MOM
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Ringkasan Hasil Pertemuan</span>
-                  <textarea
-                    value={formData.summary}
-                    onChange={(e) => handleFormChange('summary', e.target.value)}
-                    placeholder="Ringkas hasil diskusi dengan klien..."
-                    rows={4}
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
+            <label>
+              PIC (Penanggung Jawab)
+              <input
+                value={formData.pic_name}
+                onChange={(e) => handleFormChange('pic_name', e.target.value)}
+                placeholder="Nama orang yang bertanggung jawab"
+              />
+            </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Catatan Tambahan</span>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => handleFormChange('notes', e.target.value)}
-                    placeholder="Catatan atau follow-up penting..."
-                    rows={3}
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
+            <label>
+              Tanggal Pertemuan
+              <input
+                type="date"
+                value={formData.meeting_date}
+                onChange={(e) => handleFormChange('meeting_date', e.target.value)}
+                required
+              />
+            </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Action Items / Kesimpulan</span>
-                  <textarea
-                    value={formData.action_items}
-                    onChange={(e) => handleFormChange('action_items', e.target.value)}
-                    placeholder="Tindak lanjut yang perlu dilakukan..."
-                    rows={3}
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#0066cc'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
-              </div>
-            </div>
+            <label>
+              Waktu Pertemuan
+              <input
+                type="time"
+                value={formData.meeting_time}
+                onChange={(e) => handleFormChange('meeting_time', e.target.value)}
+              />
+            </label>
 
-            {/* Follow-up Section */}
-            <div style={{ padding: '2rem', borderBottom: '2px solid #f0f0f0' }}>
-              <h3 style={{ fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: '#666', letterSpacing: '0.5px', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '3px', height: '3px', borderRadius: '50%', backgroundColor: '#7c3aed' }}></div>
-                Tindak Lanjut
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>PIC (Penanggung Jawab) <small style={{ color: '#888', fontWeight: '400' }}>- opsional</small></span>
-                  <input
-                    value={formData.pic_name}
-                    onChange={(e) => handleFormChange('pic_name', e.target.value)}
-                    placeholder="Nama orang yang bertanggung jawab"
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#7c3aed'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
+            <label>
+              Ringkasan Hasil Pertemuan
+              <textarea
+                value={formData.summary}
+                onChange={(e) => handleFormChange('summary', e.target.value)}
+                placeholder="Ringkas hasil diskusi dengan klien..."
+                rows={4}
+              />
+            </label>
 
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: '600', color: '#333', fontSize: '14px' }}>Deadline</span>
-                  <input
-                    type="date"
-                    value={formData.deadline}
-                    onChange={(e) => handleFormChange('deadline', e.target.value)}
-                    style={{ padding: '10px 12px', border: '1.5px solid #e0e0e0', borderRadius: '6px', fontSize: '14px', fontFamily: 'inherit' }}
-                    onFocus={(e) => e.currentTarget.style.borderColor = '#7c3aed'}
-                    onBlur={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
-                  />
-                </label>
-              </div>
-            </div>
+            <label>
+              Action Items / Kesimpulan
+              <textarea
+                value={formData.action_items}
+                onChange={(e) => handleFormChange('action_items', e.target.value)}
+                placeholder="Tindak lanjut yang perlu dilakukan..."
+                rows={3}
+              />
+            </label>
 
-            {/* Actions */}
-            <div className="form-actions" style={{ display: 'flex', gap: '10px', padding: '2rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+            <div className="form-actions">
               {formData.status === 'DRAFT' ? (
                 <>
-                  <button 
-                    className="submit-button" 
-                    type="button" 
-                    onClick={() => saveDraft()} 
-                    disabled={isSavingDraft || !formData.client_name}
-                    style={{ 
-                      backgroundColor: isSavingDraft ? '#ccc' : '#ff9500',
-                      color: 'white',
-                      padding: '10px 20px',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: '600',
-                      cursor: isSavingDraft ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '14px'
-                    }}
-                    onMouseEnter={(e) => !isSavingDraft && (e.currentTarget.style.backgroundColor = '#e68900')}
-                    onMouseLeave={(e) => !isSavingDraft && (e.currentTarget.style.backgroundColor = '#ff9500')}
-                  >
-                    💾 Simpan Draft
+                  <button className="submit-button" type="button" onClick={() => saveDraft()} disabled={isSavingDraft || !formData.client_name}>
+                    <Save size={16} /> Simpan Draft
                   </button>
-                  <button 
-                    className="submit-button" 
-                    type="submit" 
-                    style={{ 
-                      backgroundColor: '#00b894',
-                      color: 'white',
-                      padding: '10px 20px',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: '600',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      fontSize: '14px'
-                    }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#009373'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#00b894'}
-                  >
-                    <Send size={16} /> Publikasikan MOM
+                  <button className="submit-button" type="submit" style={{ backgroundColor: '#2868a9' }}>
+                    <Send size={18} /> Publikasikan MOM
                   </button>
                 </>
               ) : (userRole as string) === 'super-admin' ? (
                   <>
-                    <button 
-                      className="submit-button" 
-                      type="button" 
-                      onClick={() => updatePublishedMOM()} 
-                      style={{ 
-                        backgroundColor: '#0066cc',
-                        color: 'white',
-                        padding: '10px 20px',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontSize: '14px'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#0052a3'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#0066cc'}
-                    >
-                      ✏️ Update MOM
+                    <button className="submit-button" type="button" onClick={() => updatePublishedMOM()} style={{ backgroundColor: '#2868a9' }}>
+                      <Pencil size={16} /> Update MOM
                     </button>
-                    <button 
-                      className="cancel-button" 
-                      type="button" 
-                      onClick={() => deleteMOM(formData.id)}
-                      style={{ 
-                        backgroundColor: '#ff4757',
-                        color: 'white',
-                        padding: '10px 20px',
-                        border: 'none',
-                        borderRadius: '6px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        fontSize: '14px'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#ff3838'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ff4757'}
-                    >
-                      🗑️ Hapus MOM
+                    <button className="cancel-button" type="button" onClick={() => deleteMOM(formData.id)}>
+                      <Trash2 size={16} /> Hapus MOM
                     </button>
                   </>
                 ) : null}
-              <button 
-                className="cancel-button" 
-                type="button" 
-                onClick={() => setShowForm(false)}
-                style={{ 
-                  backgroundColor: '#e0e0e0',
-                  color: '#333',
-                  padding: '10px 20px',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  fontSize: '14px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d0d0d0'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#e0e0e0'}
-              >
+              <button className="cancel-button" type="button" onClick={() => setShowForm(false)}>
                 Tutup
               </button>
               {lastSaved && (
-                <small style={{ color: '#00b894', fontWeight: '600', marginLeft: 'auto', fontSize: '13px' }}>
-                  ✓ Draft tersimpan {lastSaved}
+                <small style={{ color: '#2868a9' }}>
+                  <CheckCircle2 size={14} /> Draft tersimpan {lastSaved}
                 </small>
               )}
             </div>
 
             {formData.status === 'DRAFT' && (
               <p className="form-hint">
-                <AlertCircle size={14} /> Draft tersimpan otomatis di perangkat ini. Publikasi MOM dibatasi sampai pukul 00.00 pada hari berikutnya; Super Admin tetap dapat mengedit atau menghapus MOM kapan saja.
+                <AlertCircle size={14} /> Draft Anda otomatis tersimpan di perangkat ini (seperti WhatsApp). Tekan "Simpan Draft" untuk menyimpan ke database agar bisa diakses di perangkat lain. Tekan "Publikasikan MOM" untuk mengirim ke tim.
               </p>
             )}
           </form>
         </div>
       )}
 
-      <div className="settings-grid">
-        <div className="users-panel">
-          <div className="panel-heading">
-            <div className="panel-icon">
-              <FileText size={18} />
-            </div>
+      <div className="mom-list-wrap">
+        <div className="users-panel mom-list-panel">
+          <div className="mom-list-heading">
             <div>
-              <h2>
-                {userRole === 'sales' ? 'MOM Saya' : 'MOM Published'}
-              </h2>
-              <p>
-                {momList.length} laporan
-              </p>
+              <p className="eyebrow">Meeting records</p>
+              <h2>{userRole === 'sales' ? 'Arsip pertemuan saya' : 'Laporan dari tim sales'}</h2>
+              <p>{momList.length} laporan tercatat di workspace</p>
             </div>
+            <span className="mom-list-date"><CalendarDays size={16} /> {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</span>
           </div>
 
           {momList.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-              <p>Belum ada MOM</p>
+            <div className="mom-empty-state">
+              <span><FileText size={22} /></span>
+              <strong>Belum ada catatan pertemuan.</strong>
+              <p>{userRole === 'sales' ? 'Buat MOM pertama untuk mulai mengarsipkan hasil diskusi.' : 'Laporan yang dipublikasikan tim sales akan muncul di sini.'}</p>
             </div>
           ) : (
-            <table className="users-table">
-              <thead>
-                <tr>
-                  <th>Client</th>
-                  <th>Tanggal</th>
-                  <th>Status</th>
-                  <th>Dibuat oleh</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {momList.map((mom) => (
-                  <tr key={mom.id}>
-                    <td>
-                      <strong>{mom.client_name}</strong>
-                    </td>
-                    <td>{new Date(mom.meeting_date).toLocaleDateString('id-ID')}</td>
-                    <td>
-                      <span
-                        style={{
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: '500',
-                          backgroundColor: mom.status === 'DRAFT' ? '#fff3cd' : '#d4edda',
-                          color: mom.status === 'DRAFT' ? '#856404' : '#155724',
-                        }}
-                      >
-                        {mom.status}
-                      </span>
-                    </td>
-                    <td>{mom.created_by_name}</td>
-                    <td>
-                      <button
-                        onClick={() => {
-                          setFormData(mom)
-                          setShowForm(true)
-                        }}
-                        style={{ padding: '4px 8px', fontSize: '12px', cursor: 'pointer' }}
-                      >
-                        {mom.status === 'PUBLISHED' && userRole === 'super-admin' ? 'Edit / Lihat' : 'Lihat'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="mom-table-scroll">
+              <table className="users-table mom-table">
+                <thead>
+                  <tr><th>Client / topik</th><th>Tanggal pertemuan</th><th>Status</th><th>Dibuat oleh</th><th aria-label="Aksi" /></tr>
+                </thead>
+                <tbody>
+                  {momList.map((mom) => (
+                    <tr key={mom.id}>
+                      <td><strong>{mom.client_name}</strong><small>{mom.summary || 'Catatan pertemuan'}</small></td>
+                      <td><span className="mom-meeting-date">{new Date(mom.meeting_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>{mom.meeting_time && <small>{mom.meeting_time}</small>}</td>
+                      <td><span className={`mom-status ${mom.status === 'DRAFT' ? 'is-draft' : 'is-published'}`}><span />{mom.status === 'DRAFT' ? 'Draft' : 'Published'}</span></td>
+                      <td><span className="mom-author"><span>{mom.created_by_name?.trim()?.slice(0, 1).toUpperCase() || '?'}</span>{mom.created_by_name}</span></td>
+                      <td><button className="mom-open-button" onClick={() => { setFormData(mom); setShowForm(true) }}>{mom.status === 'PUBLISHED' && userRole === 'super-admin' ? 'Edit / Lihat' : 'Lihat'} <ArrowUpRight size={15} /></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>
