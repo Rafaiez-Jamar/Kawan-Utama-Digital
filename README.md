@@ -28,7 +28,7 @@ This is a temporary bridge, not a production hosting setup. The laptop, PostgreS
 6. Open the Vercel deployment URL and sign in. Check that `https://your-vercel-domain/api/health` responds with `{"status":"ok","database":"connected"}`. A direct request to `https://your-reserved-domain.ngrok-free.app/api/health` should return HTTP 403; do not disable this protection.
 7. Leave the laptop plugged in, prevent it from sleeping, and keep PostgreSQL, `npm run tunnel:api`, and ngrok running while clients use the site. To return to local development, stop the tunnel API and restart `npm run dev`.
 
-The Vercel function in `api/[...path].js` keeps the tunnel URL and proxy secret server-side and streams responses back to the browser. The public frontend does not receive either value.
+The Vercel function in `api/[...path].js` keeps the tunnel URL and proxy secret server-side and streams responses back to the browser. The SPA fallback deliberately excludes `/api/*` so API requests reach that function instead of returning the frontend HTML. The public frontend does not receive either value.
 
 ### Supabase reference
 
