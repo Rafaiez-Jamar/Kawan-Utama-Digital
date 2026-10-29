@@ -54,7 +54,8 @@ export function loadDeliveryItems(): { items: DeliveryItem[]; canPersist: boolea
       existingItems = parsed
     }
 
-    const projects = JSON.parse(localStorage.getItem('kawan-funnel-projects') ?? '[]') as Array<{ id: number; customer: string; sales: string; items: Array<{ id: number; detail: string; qty: number }> }>
+    const parsedProjects: unknown = JSON.parse(localStorage.getItem('kawan-funnel-projects') ?? '[]')
+    const projects = Array.isArray(parsedProjects) ? parsedProjects as Array<{ id: number; customer: string; sales: string; items: Array<{ id: number; detail: string; qty: number }> }> : []
     const fromFunnel = projects.flatMap((project) => project.items.map((item) => ({
       id: `funnel-${project.id}-${item.id}`,
       customer: project.customer,
@@ -67,7 +68,8 @@ export function loadDeliveryItems(): { items: DeliveryItem[]; canPersist: boolea
       destination: project.customer,
       status: 'Menunggu Product' as DeliveryStatus,
     })))
-    const sphList = JSON.parse(localStorage.getItem('kawan-sph') ?? '[]') as Array<{ id: string; requestId?: string; customer: string; owner: string; status: string; items: Array<{ id: string; product: string; quantity: number }> }>
+    const parsedSph: unknown = JSON.parse(localStorage.getItem('kawan-sph') ?? '[]')
+    const sphList = Array.isArray(parsedSph) ? parsedSph as Array<{ id: string; requestId?: string; customer: string; owner: string; status: string; items: Array<{ id: string; product: string; quantity: number }> }> : []
     const fromApprovedSPH = sphList
       .filter((order) => !order.requestId && ['Approved', 'Sent to Customer', 'WIN'].includes(order.status))
       .flatMap((order) => order.items.map((item) => ({

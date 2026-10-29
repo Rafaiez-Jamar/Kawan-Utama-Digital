@@ -29,6 +29,14 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   return data as T
 }
 
+async function requestArray<T>(path: string): Promise<T[]> {
+  const data = await request<unknown>(path)
+  if (!Array.isArray(data)) {
+    throw new Error(`Respons API ${path} tidak berisi daftar data yang valid.`)
+  }
+  return data as T[]
+}
+
 export const localApi = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown) => request<T>(path, 'POST', body),
@@ -38,19 +46,25 @@ export const localApi = {
   login: (email: string, password: string) => request<{ user: LocalUser }>('/auth/login', 'POST', { email, password }),
   logout: () => request<{ ok: boolean }>('/auth/logout', 'POST', {}),
   session: () => request<{ user: LocalUser | null }>('/auth/session'),
-  profiles: () => request<LocalUser[]>('/profiles'),
-  users: () => request<LocalUser[]>('/users'),
+  profiles: () => requestArray<LocalUser>('/profiles'),
+  users: () => requestArray<LocalUser>('/users'),
   manageUser: (payload: Record<string, string>) => request('/users', 'POST', payload),
-  salesTarget: (start: string, end: string) => request<SalesTargetProgress>(`/sales-target?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
-  salesTargets: (start: string, end: string) => request<SalesTarget[]>(`/sales-targets?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
+  salesTarget: async (start: string, end: string) => {
+    const data = await request<unknown>(`/sales-target?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`)
+    if (!data || typeof data !== 'object' || !('target' in data) || !('achieved' in data)) {
+      throw new Error('Respons progress target Sales tidak valid.')
+    }
+    return data as SalesTargetProgress
+  },
+  salesTargets: (start: string, end: string) => requestArray<SalesTarget>(`/sales-targets?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`),
   updateSalesTarget: (id: string, target: number) => request<SalesTarget>(`/sales-targets/${encodeURIComponent(id)}`, 'PATCH', { target }),
-  attendance: (start: string, end: string, includePhotos = false) => request<Array<Record<string, unknown>>>(`/attendance?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${includePhotos ? '&photos=1' : ''}`),
+  attendance: (start: string, end: string, includePhotos = false) => requestArray<Record<string, unknown>>(`/attendance?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${includePhotos ? '&photos=1' : ''}`),
   attendancePhoto: (id: string) => request<{ photo_data: string | null }>(`/attendance/${encodeURIComponent(id)}/photo`),
   saveAttendance: (payload: Record<string, unknown>) => request<{ id: string; created_at: string }>('/attendance', 'POST', payload),
   updateAttendancePhoto: (id: string, photo_data: string) => request<{ ok: boolean }>(`/attendance/${encodeURIComponent(id)}/photo`, 'PATCH', { photo_data }),
   presence: () => request<Array<Record<string, unknown>>>('/presence'),
   updatePresence: (sessionId: string, is_online: boolean) => request<{ ok: boolean }>(`/presence/${encodeURIComponent(sessionId)}`, 'PUT', { is_online }),
-  mom: <T>(id?: number) => request<T>(`/mom${id === undefined ? '' : `?id=${encodeURIComponent(id)}`}`),
+  mom: <T>(id?: number) => id === undefined ? requestArray<T>('/mom') : request<T>(`/mom?id=${encodeURIComponent(id)}`),
   createMom: <T>(payload: Record<string, unknown>) => request<T>('/mom', 'POST', payload),
   updateMom: (id: number, payload: Record<string, unknown>) => request(`/mom/${id}`, 'PATCH', payload),
   deleteMom: (id: number) => request<{ ok: boolean }>(`/mom/${id}`, 'DELETE'),
@@ -59,12 +73,12 @@ export const localApi = {
 
 export async function loadWorkspaceRows(modules: WorkspaceModule[]) {
   const query = encodeURIComponent(modules.join(','))
-  return request<WorkspaceRow[]>(`/workspace?modules=${query}`)
+  return requestArray<WorkspaceRow>(`/workspace?modules=${query}`)
 }
 
 export async function loadDeliveryWorkspaceRows(modules: WorkspaceModule[]) {
   const query = encodeURIComponent(modules.join(','))
-  return request<WorkspaceRow[]>(`/workspace?modules=${query}&light=1`)
+  return requestArray<WorkspaceRow>(`/workspace?modules=${query}&light=1`)
 }
 
 export async function loadWorkspaceRow(module: WorkspaceModule, recordId: string) {

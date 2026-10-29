@@ -398,7 +398,6 @@ function App() {
   }
 
   return (
-    <AppErrorBoundary>
       <div className="app-shell">
         <aside className={`sidebar ${menuOpen ? 'sidebar-open' : ''}`}>
           <div className="sidebar-topline">
@@ -446,6 +445,7 @@ function App() {
             </div>
           </header>
 
+          <AppErrorBoundary key={activeView}>
           {activeView === 'Target Sales' && (role === 'admin' || role === 'super-admin') ? (
             <SalesTargetsView />
           ) : activeView === 'User Management' && role === 'super-admin' ? (
@@ -479,9 +479,9 @@ function App() {
               </div>
             </section>
           )}
+          </AppErrorBoundary>
         </main>
       </div>
-    </AppErrorBoundary>
   )
 }
 

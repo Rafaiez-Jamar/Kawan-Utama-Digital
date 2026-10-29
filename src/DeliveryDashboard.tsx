@@ -32,10 +32,17 @@ export function DeliveryDashboard({ userName, userEmail, userRole, mode = 'previ
   const [blockerNote, setBlockerNote] = useState('')
   const [productProgress, setProductProgress] = useState('')
   const [rabDocuments, setRabDocuments] = useState<RabDocument[]>(() => {
-    try { return (JSON.parse(localStorage.getItem('kawan-product-workspace') ?? '{}') as { rab?: RabDocument[] }).rab ?? [] } catch { return [] }
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem('kawan-product-workspace') ?? '{}')
+      if (!parsed || typeof parsed !== 'object' || !('rab' in parsed) || !Array.isArray(parsed.rab)) return []
+      return parsed.rab as RabDocument[]
+    } catch { return [] }
   })
   const [sphDocuments, setSphDocuments] = useState<SphDocument[]>(() => {
-    try { return JSON.parse(localStorage.getItem('kawan-sph') ?? '[]') as SphDocument[] } catch { return [] }
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem('kawan-sph') ?? '[]')
+      return Array.isArray(parsed) ? parsed as SphDocument[] : []
+    } catch { return [] }
   })
   const [liveLocation, setLiveLocation] = useState(false)
   const watchId = useRef<number | null>(null)
@@ -88,10 +95,16 @@ export function DeliveryDashboard({ userName, userEmail, userRole, mode = 'previ
       const remoteRabs = rows.filter((row) => row.module === 'rab').map((row) => row.payload as RabDocument)
       const remoteSphs = rows.filter((row) => row.module === 'sph').map((row) => row.payload as SphDocument)
       const localRabs = (() => {
-        try { return (JSON.parse(localStorage.getItem('kawan-product-workspace') ?? '{}') as { rab?: RabDocument[] }).rab ?? [] } catch { return [] }
+        try {
+          const parsed: unknown = JSON.parse(localStorage.getItem('kawan-product-workspace') ?? '{}')
+          return parsed && typeof parsed === 'object' && 'rab' in parsed && Array.isArray(parsed.rab) ? parsed.rab as RabDocument[] : []
+        } catch { return [] }
       })()
       const localSphs = (() => {
-        try { return JSON.parse(localStorage.getItem('kawan-sph') ?? '[]') as SphDocument[] } catch { return [] }
+        try {
+          const parsed: unknown = JSON.parse(localStorage.getItem('kawan-sph') ?? '[]')
+          return Array.isArray(parsed) ? parsed as SphDocument[] : []
+        } catch { return [] }
       })()
       const rabIds = new Set(remoteRabs.map((item) => item.id))
       const sphIds = new Set(remoteSphs.map((item) => item.id))

@@ -77,7 +77,10 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
     const savedDraft = localStorage.getItem(`mom-draft-${userEmail}`)
     if (savedDraft) {
       try {
-        setFormData(JSON.parse(savedDraft))
+        const parsed: unknown = JSON.parse(savedDraft)
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          setFormData((current) => ({ ...current, ...parsed }))
+        }
       } catch (err) {
         console.error('Failed to load draft from localStorage:', err)
       }
@@ -98,7 +101,8 @@ export function MOMView({ userName, userEmail, userRole }: MOMViewProps) {
 
   async function loadMOMList() {
     try {
-      const data = await localApi.mom<MOMRecord[]>()
+      const data = await localApi.mom<MOMRecord>()
+      if (!Array.isArray(data)) throw new Error('Respons daftar MOM tidak valid.')
       setMomList(data)
       setErrorMessage('')
     } catch (err) {

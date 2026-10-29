@@ -71,6 +71,7 @@ export function SalesTargetsView() {
     let active = true
     void localApi.salesTargets(period.start, period.end).then((data) => {
       if (!active) return
+      if (!Array.isArray(data)) throw new Error('Respons daftar target Sales tidak valid.')
       setTargets(data)
       setValues(Object.fromEntries(data.map((item) => [item.id, String(item.target)])))
       setLoading(false)
