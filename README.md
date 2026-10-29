@@ -30,6 +30,8 @@ This is a temporary bridge, not a production hosting setup. The laptop, PostgreS
 
 The Vercel function in `api/[...path].js` keeps the tunnel URL and proxy secret server-side and streams responses back to the browser. The SPA fallback deliberately excludes `/api/*` so API requests reach that function instead of returning the frontend HTML. The public frontend does not receive either value.
 
+If the UI says the local API cannot be reached through the tunnel, check that PostgreSQL is running, `npm run tunnel:api` finished starting successfully, and the ngrok process is still connected to port 3001. Then check `/api/health` on the Vercel domain; it should return `{"status":"ok","database":"connected"}`. Do not expose a regular `npm run dev` API through ngrok: tunnel mode is required to enforce the proxy secret.
+
 ### Supabase reference
 
 Supabase migration scripts and setup notes remain in this repository for reference. Do not run deployment or migration commands against the live Supabase project as part of local development.
